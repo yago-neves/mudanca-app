@@ -2,12 +2,17 @@
 <html lang="pt-br">
 
 <head>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#2563eb">
 
     <title>Planner de Mudança</title>
 
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="./manifest.json">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <style>
         body {
@@ -19,15 +24,15 @@
         header {
             background: #2563eb;
             color: white;
-            padding: 20px;
+            padding: 18px;
             font-size: 22px;
             font-weight: bold;
             text-align: center;
         }
 
         .container {
-            padding: 20px;
-            max-width: 800px;
+            padding: 18px;
+            max-width: 900px;
             margin: auto;
         }
 
@@ -36,7 +41,21 @@
             border-radius: 12px;
             padding: 18px;
             margin-bottom: 18px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
         }
 
         .progressbar {
@@ -50,62 +69,37 @@
             height: 100%;
             width: 0%;
             background: #22c55e;
-            text-align: center;
+            transition: width .4s;
             color: white;
             font-size: 12px;
-        }
-
-        .item {
-            display: flex;
-            align-items: center;
-            margin: 6px 0;
-        }
-
-        .item input {
-            margin-right: 10px;
-        }
-
-        button {
-            background: #2563eb;
-            color: white;
-            border: none;
-            padding: 10px 14px;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        button.secondary {
-            background: #64748b;
+            text-align: center;
         }
 
         input {
             padding: 8px;
+            margin: 5px;
             border-radius: 6px;
-            border: 1px solid #cbd5e1;
+            border: 1px solid #ccc;
         }
 
-        .row {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
+        .box {
+            border: 1px solid #ddd;
+            padding: 10px;
             margin-top: 10px;
+            border-radius: 8px;
         }
 
-        .chart {
-            display: flex;
-            gap: 8px;
-            align-items: flex-end;
-            height: 120px;
-            margin-top: 10px;
-        }
+        @media(prefers-color-scheme:dark) {
 
-        .bar {
-            flex: 1;
-            background: #3b82f6;
-            border-radius: 6px 6px 0 0;
-            color: white;
-            font-size: 12px;
-            text-align: center;
+            body {
+                background: #0f172a;
+                color: white;
+            }
+
+            .card {
+                background: #1e293b;
+            }
+
         }
     </style>
 </head>
@@ -126,48 +120,39 @@
 
         </div>
 
-        <div id="lista" class="card"></div>
-
         <div class="card">
 
-            <h3>Adicionar Item</h3>
+            <h3>Checklist</h3>
 
-            <div class="row">
-                <input id="itemNome" placeholder="Item">
-                <input id="itemCat" placeholder="Categoria">
-                <button onclick="addItem()">Adicionar</button>
-            </div>
+            <div id="checklist"></div>
 
         </div>
 
         <div class="card">
 
-            <h3>Custos da Mudança</h3>
+            <h3>📦 Inventário de Caixas</h3>
 
-            <div class="row">
-                <input id="custoNome" placeholder="Ex: Caminhão">
-                <input id="custoValor" type="number" placeholder="Valor">
-                <button onclick="addCost()">Adicionar</button>
-            </div>
+            <input id="boxName" placeholder="Nome da caixa">
+            <input type="file" id="boxPhoto" accept="image/*" capture="environment">
 
-            <div id="custos"></div>
+            <button onclick="addBox()">Adicionar caixa</button>
 
-            <h4>Total: R$ <span id="total">0</span></h4>
+            <div id="boxes"></div>
 
         </div>
 
         <div class="card">
 
-            <h3>Progresso por Categoria</h3>
+            <h3>📊 Progresso</h3>
 
-            <div id="chart" class="chart"></div>
+            <canvas id="chart"></canvas>
 
         </div>
 
         <div class="card">
 
-            <button onclick="exportData()">Exportar</button>
-            <button class="secondary" onclick="resetData()">Resetar</button>
+            <button onclick="exportData()">Exportar dados</button>
+            <button onclick="resetData()">Resetar</button>
 
         </div>
 
@@ -175,66 +160,71 @@
 
     <script>
 
-        const STORAGE = "mudancaApp";
+        const STORAGE = "mudancaAppV2";
 
-        let data = JSON.parse(localStorage.getItem(STORAGE)) || {
-
-            itens: {
+        const defaultData = {
+            items: {
                 Quarto: ["Cama", "Colchão"],
                 Cozinha: ["Geladeira", "Fogão"],
                 Sala: ["Sofá", "TV"]
             },
-
-            estado: {},
-
-            custos: []
+            state: {},
+            boxes: []
         };
+
+        function loadData() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE)) || defaultData;
+            } catch {
+                return defaultData;
+            }
+        }
+
+        let data = loadData();
 
         function save() {
             localStorage.setItem(STORAGE, JSON.stringify(data));
         }
 
-        function render() {
+        function renderChecklist() {
 
-            const lista = document.getElementById("lista");
-            lista.innerHTML = "";
+            const div = document.getElementById("checklist");
+            div.innerHTML = "";
 
-            for (const cat in data.itens) {
+            for (const cat in data.items) {
 
-                const title = document.createElement("h3");
+                const title = document.createElement("h4");
                 title.innerText = cat;
-                lista.appendChild(title);
 
-                data.itens[cat].forEach(item => {
+                div.appendChild(title);
 
-                    const div = document.createElement("div");
-                    div.className = "item";
+                data.items[cat].forEach(item => {
+
+                    const row = document.createElement("div");
 
                     const cb = document.createElement("input");
                     cb.type = "checkbox";
-                    cb.checked = data.estado[item] || false;
+                    cb.checked = data.state[item] || false;
 
                     cb.onchange = () => {
-                        data.estado[item] = cb.checked;
+                        data.state[item] = cb.checked;
                         save();
-                        update();
+                        updateProgress();
+                        renderChart();
                     };
 
-                    div.appendChild(cb);
-                    div.appendChild(document.createTextNode(item));
+                    row.appendChild(cb);
+                    row.appendChild(document.createTextNode(item));
 
-                    lista.appendChild(div);
+                    div.appendChild(row);
 
                 });
 
             }
 
-            renderCosts();
-            update();
-
         }
 
-        function update() {
+        function updateProgress() {
 
             const total = document.querySelectorAll("input[type=checkbox]").length;
             const done = document.querySelectorAll("input[type=checkbox]:checked").length;
@@ -242,87 +232,88 @@
             const p = Math.round((done / total) * 100);
 
             const bar = document.getElementById("progress");
+
             bar.style.width = p + "%";
             bar.innerText = p + "%";
 
-            renderChart();
-
         }
 
-        function addItem() {
+        function addBox() {
 
-            const item = document.getElementById("itemNome").value;
-            const cat = document.getElementById("itemCat").value;
+            const name = document.getElementById("boxName").value;
 
-            if (!item || !cat) return;
+            if (!name) return;
 
-            if (!data.itens[cat]) data.itens[cat] = [];
-
-            data.itens[cat].push(item);
+            data.boxes.push({ name });
 
             save();
-            render();
+
+            renderBoxes();
 
         }
 
-        function addCost() {
+        function renderBoxes() {
 
-            const nome = document.getElementById("custoNome").value;
-            const valor = parseFloat(document.getElementById("custoValor").value);
+            const div = document.getElementById("boxes");
 
-            data.custos.push({ nome, valor });
-
-            save();
-            renderCosts();
-
-        }
-
-        function renderCosts() {
-
-            const div = document.getElementById("custos");
             div.innerHTML = "";
 
-            let total = 0;
+            data.boxes.forEach(box => {
 
-            data.custos.forEach(c => {
+                const el = document.createElement("div");
+                el.className = "box";
 
-                const d = document.createElement("div");
+                const title = document.createElement("h4");
+                title.innerText = box.name;
 
-                d.innerText = c.nome + " - R$ " + c.valor;
+                el.appendChild(title);
 
-                div.appendChild(d);
+                const qr = document.createElement("div");
 
-                total += c.valor;
+                new QRCode(qr, box.name);
+
+                el.appendChild(qr);
+
+                div.appendChild(el);
 
             });
 
-            document.getElementById("total").innerText = total;
-
         }
+
+        let chart;
 
         function renderChart() {
 
-            const chart = document.getElementById("chart");
-            chart.innerHTML = "";
+            const ctx = document.getElementById("chart");
 
-            for (const cat in data.itens) {
+            let labels = [];
+            let values = [];
+
+            for (const cat in data.items) {
 
                 let done = 0;
 
-                data.itens[cat].forEach(i => {
-                    if (data.estado[i]) done++;
+                data.items[cat].forEach(i => {
+                    if (data.state[i]) done++;
                 });
 
-                const percent = Math.round((done / data.itens[cat].length) * 100);
-
-                const bar = document.createElement("div");
-                bar.className = "bar";
-                bar.style.height = percent + "%";
-                bar.innerText = percent + "%";
-
-                chart.appendChild(bar);
+                labels.push(cat);
+                values.push(done);
 
             }
+
+            if (chart) chart.destroy();
+
+            chart = new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: "Itens concluídos",
+                        data: values
+                    }]
+                }
+            });
 
         }
 
@@ -331,8 +322,10 @@
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
 
             const a = document.createElement("a");
+
             a.href = URL.createObjectURL(blob);
             a.download = "mudanca.json";
+
             a.click();
 
         }
@@ -340,14 +333,20 @@
         function resetData() {
 
             localStorage.removeItem(STORAGE);
+
             location.reload();
 
         }
 
-        render();
+        renderChecklist();
+        renderBoxes();
+        updateProgress();
+        renderChart();
 
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("service-worker.js");
+
+            navigator.serviceWorker.register("./service-worker.js");
+
         }
 
     </script>
