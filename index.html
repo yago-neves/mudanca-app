@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+
+    <title>Planner de Mudança</title>
+
+    <link rel="manifest" href="manifest.json">
+
+    <style>
+        body {
+            font-family: system-ui;
+            margin: 0;
+            background: #f1f5f9;
+        }
+
+        header {
+            background: #2563eb;
+            color: white;
+            padding: 20px;
+            font-size: 22px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .container {
+            padding: 20px;
+            max-width: 800px;
+            margin: auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 18px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        .progressbar {
+            height: 20px;
+            background: #e2e8f0;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .progress {
+            height: 100%;
+            width: 0%;
+            background: #22c55e;
+            text-align: center;
+            color: white;
+            font-size: 12px;
+        }
+
+        .item {
+            display: flex;
+            align-items: center;
+            margin: 6px 0;
+        }
+
+        .item input {
+            margin-right: 10px;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: #64748b;
+        }
+
+        input {
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .chart {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+            height: 120px;
+            margin-top: 10px;
+        }
+
+        .bar {
+            flex: 1;
+            background: #3b82f6;
+            border-radius: 6px 6px 0 0;
+            color: white;
+            font-size: 12px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>📦 Planner de Mudança</header>
+
+    <div class="container">
+
+        <div class="card">
+
+            <h3>Progresso</h3>
+
+            <div class="progressbar">
+                <div id="progress" class="progress">0%</div>
+            </div>
+
+        </div>
+
+        <div id="lista" class="card"></div>
+
+        <div class="card">
+
+            <h3>Adicionar Item</h3>
+
+            <div class="row">
+                <input id="itemNome" placeholder="Item">
+                <input id="itemCat" placeholder="Categoria">
+                <button onclick="addItem()">Adicionar</button>
+            </div>
+
+        </div>
+
+        <div class="card">
+
+            <h3>Custos da Mudança</h3>
+
+            <div class="row">
+                <input id="custoNome" placeholder="Ex: Caminhão">
+                <input id="custoValor" type="number" placeholder="Valor">
+                <button onclick="addCost()">Adicionar</button>
+            </div>
+
+            <div id="custos"></div>
+
+            <h4>Total: R$ <span id="total">0</span></h4>
+
+        </div>
+
+        <div class="card">
+
+            <h3>Progresso por Categoria</h3>
+
+            <div id="chart" class="chart"></div>
+
+        </div>
+
+        <div class="card">
+
+            <button onclick="exportData()">Exportar</button>
+            <button class="secondary" onclick="resetData()">Resetar</button>
+
+        </div>
+
+    </div>
+
+    <script>
+
+        const STORAGE = "mudancaApp";
+
+        let data = JSON.parse(localStorage.getItem(STORAGE)) || {
+
+            itens: {
+                Quarto: ["Cama", "Colchão"],
+                Cozinha: ["Geladeira", "Fogão"],
+                Sala: ["Sofá", "TV"]
+            },
+
+            estado: {},
+
+            custos: []
+        };
+
+        function save() {
+            localStorage.setItem(STORAGE, JSON.stringify(data));
+        }
+
+        function render() {
+
+            const lista = document.getElementById("lista");
+            lista.innerHTML = "";
+
+            for (const cat in data.itens) {
+
+                const title = document.createElement("h3");
+                title.innerText = cat;
+                lista.appendChild(title);
+
+                data.itens[cat].forEach(item => {
+
+                    const div = document.createElement("div");
+                    div.className = "item";
+
+                    const cb = document.createElement("input");
+                    cb.type = "checkbox";
+                    cb.checked = data.estado[item] || false;
+
+                    cb.onchange = () => {
+                        data.estado[item] = cb.checked;
+                        save();
+                        update();
+                    };
+
+                    div.appendChild(cb);
+                    div.appendChild(document.createTextNode(item));
+
+                    lista.appendChild(div);
+
+                });
+
+            }
+
+            renderCosts();
+            update();
+
+        }
+
+        function update() {
+
+            const total = document.querySelectorAll("input[type=checkbox]").length;
+            const done = document.querySelectorAll("input[type=checkbox]:checked").length;
+
+            const p = Math.round((done / total) * 100);
+
+            const bar = document.getElementById("progress");
+            bar.style.width = p + "%";
+            bar.innerText = p + "%";
+
+            renderChart();
+
+        }
+
+        function addItem() {
+
+            const item = document.getElementById("itemNome").value;
+            const cat = document.getElementById("itemCat").value;
+
+            if (!item || !cat) return;
+
+            if (!data.itens[cat]) data.itens[cat] = [];
+
+            data.itens[cat].push(item);
+
+            save();
+            render();
+
+        }
+
+        function addCost() {
+
+            const nome = document.getElementById("custoNome").value;
+            const valor = parseFloat(document.getElementById("custoValor").value);
+
+            data.custos.push({ nome, valor });
+
+            save();
+            renderCosts();
+
+        }
+
+        function renderCosts() {
+
+            const div = document.getElementById("custos");
+            div.innerHTML = "";
+
+            let total = 0;
+
+            data.custos.forEach(c => {
+
+                const d = document.createElement("div");
+
+                d.innerText = c.nome + " - R$ " + c.valor;
+
+                div.appendChild(d);
+
+                total += c.valor;
+
+            });
+
+            document.getElementById("total").innerText = total;
+
+        }
+
+        function renderChart() {
+
+            const chart = document.getElementById("chart");
+            chart.innerHTML = "";
+
+            for (const cat in data.itens) {
+
+                let done = 0;
+
+                data.itens[cat].forEach(i => {
+                    if (data.estado[i]) done++;
+                });
+
+                const percent = Math.round((done / data.itens[cat].length) * 100);
+
+                const bar = document.createElement("div");
+                bar.className = "bar";
+                bar.style.height = percent + "%";
+                bar.innerText = percent + "%";
+
+                chart.appendChild(bar);
+
+            }
+
+        }
+
+        function exportData() {
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "mudanca.json";
+            a.click();
+
+        }
+
+        function resetData() {
+
+            localStorage.removeItem(STORAGE);
+            location.reload();
+
+        }
+
+        render();
+
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("service-worker.js");
+        }
+
+    </script>
+
+</body>
+
+</html>
